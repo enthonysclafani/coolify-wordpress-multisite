@@ -1,0 +1,46 @@
+name: Validate stack
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  WORDPRESS_DOMAIN: example.com
+  WORDPRESS_TITLE: CI Network
+  WORDPRESS_ADMIN_USER: networkadmin
+  WORDPRESS_ADMIN_EMAIL: admin@example.com
+  WORDPRESS_ADMIN_PASSWORD: ci-placeholder-at-least-12-characters
+  SERVICE_PASSWORD_MARIADB: ci-placeholder-mariadb
+  SERVICE_PASSWORD_WORDPRESS: ci-placeholder-wordpress
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate YAML syntax
+        run: ruby -e 'require "yaml"; ARGV.each { |file| YAML.parse_file(file) }' docker-compose.yml .github/workflows/validate.yml
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+
+      - name: Validate shell scripts
+        run: |
+          bash -n docker/*.sh
+          shellcheck docker/*.sh
+
+      - name: Validate Docker Compose
+        run: docker compose config --quiet
+
+      - name: Build WordPress image
+        run: docker compose build --pull wordpress
