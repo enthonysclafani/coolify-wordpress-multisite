@@ -21,12 +21,15 @@ RUN set -Eeuo pipefail; \
 COPY openlitespeed/httpd_config.conf /usr/local/lsws/conf/httpd_config.conf
 COPY openlitespeed/vhosts/wordpress/vhconf.conf /usr/local/lsws/conf/vhosts/wordpress/vhconf.conf
 COPY openlitespeed/vhosts/wordpress/.htaccess.template /usr/local/share/wordpress-stack/.htaccess.template
+COPY openlitespeed/vhosts/wordpress/.htaccess.multisite-subdomain.template /usr/local/share/wordpress-stack/.htaccess.multisite-subdomain.template
+COPY openlitespeed/vhosts/wordpress/.htaccess.single.template /usr/local/share/wordpress-stack/.htaccess.single.template
 COPY docker/php/custom.ini.template /usr/local/share/wordpress-stack/custom.ini.template
 COPY docker/php/opcache.ini /usr/local/lsws/lsphp83/etc/php/8.3/mods-available/99-wordpress-opcache.ini
 COPY docker/entrypoint.sh /usr/local/bin/wordpress-entrypoint
 COPY docker/bootstrap-wordpress.sh /usr/local/bin/bootstrap-wordpress
 COPY docker/healthcheck.sh /usr/local/bin/wordpress-healthcheck
 COPY docker/cron.sh /usr/local/bin/wordpress-cron
+COPY docker/coolify-multisite-https.php /usr/local/share/wordpress-stack/coolify-multisite-https.php
 COPY docker/manage-htaccess.php /usr/local/lib/wordpress-stack/manage-htaccess.php
 COPY docker/manage-wp-config.php /usr/local/lib/wordpress-stack/manage-wp-config.php
 
@@ -37,9 +40,12 @@ RUN set -Eeuo pipefail; \
         /usr/local/bin/wordpress-healthcheck \
         /usr/local/bin/wordpress-cron; \
     chmod 0644 \
+        /usr/local/share/wordpress-stack/coolify-multisite-https.php \
         /usr/local/lib/wordpress-stack/manage-htaccess.php \
         /usr/local/lib/wordpress-stack/manage-wp-config.php \
         /usr/local/share/wordpress-stack/.htaccess.template \
+        /usr/local/share/wordpress-stack/.htaccess.multisite-subdomain.template \
+        /usr/local/share/wordpress-stack/.htaccess.single.template \
         /usr/local/share/wordpress-stack/custom.ini.template \
         /usr/local/lsws/lsphp83/etc/php/8.3/mods-available/99-wordpress-opcache.ini; \
     chown -R lsadm:lsadm /usr/local/lsws/conf; \
@@ -50,6 +56,7 @@ RUN set -Eeuo pipefail; \
     for extension in "${required_extensions[@]}"; do \
         grep -qx "${extension}" <<<"${loaded_extensions}" || { echo "Estensione PHP richiesta assente: ${extension}" >&2; exit 1; }; \
     done; \
+    /usr/local/lsws/lsphp83/bin/php -l /usr/local/share/wordpress-stack/coolify-multisite-https.php >/dev/null; \
     /usr/local/lsws/lsphp83/bin/php -l /usr/local/lib/wordpress-stack/manage-htaccess.php >/dev/null; \
     /usr/local/lsws/lsphp83/bin/php -l /usr/local/lib/wordpress-stack/manage-wp-config.php >/dev/null; \
     /usr/local/lsws/bin/openlitespeed -t

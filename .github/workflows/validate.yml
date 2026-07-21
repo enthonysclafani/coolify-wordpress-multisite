@@ -15,6 +15,8 @@ env:
   WORDPRESS_ADMIN_USER: networkadmin
   WORDPRESS_ADMIN_EMAIL: admin@example.com
   WORDPRESS_ADMIN_PASSWORD: ci-placeholder-at-least-12-characters
+  WORDPRESS_ENABLE_MULTISITE: "true"
+  WORDPRESS_MULTISITE_MODE: subdirectory
   SERVICE_PASSWORD_MARIADB: ci-placeholder-mariadb
   SERVICE_PASSWORD_WORDPRESS: ci-placeholder-wordpress
 

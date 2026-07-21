@@ -21,7 +21,7 @@ if ($current === false) {
     throw new RuntimeException('Impossibile leggere il file .htaccess esistente.');
 }
 
-$pattern = '/# BEGIN Coolify WordPress Multisite\R.*?# END Coolify WordPress Multisite\R?/s';
+$pattern = '/# BEGIN Coolify WordPress(?: Multisite| Single Site| Managed)?\R.*?# END Coolify WordPress(?: Multisite| Single Site| Managed)?\R?/s';
 if (preg_match($pattern, $current) === 1) {
     $updated = preg_replace($pattern, $managedBlock, $current, 1);
     if ($updated === null) {

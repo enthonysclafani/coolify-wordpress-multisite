@@ -1,6 +1,6 @@
-# WordPress Multisite su OpenLiteSpeed per Coolify
+# WordPress single-site o Multisite su OpenLiteSpeed per Coolify
 
-Stack Docker completo per distribuire con un solo deploy un network **WordPress Multisite in sottocartelle** dietro il reverse proxy HTTPS di **Coolify**. L'installazione iniziale è automatica e idempotente: non richiede la procedura guidata nel browser, modifiche manuali a `wp-config.php` o `.htaccess`, SSH o comandi post-deploy.
+Stack Docker completo per distribuire con un solo deploy **WordPress single-site** oppure **WordPress Multisite**, in sottocartelle o sottodomini, dietro il reverse proxy HTTPS di **Coolify**. L'installazione iniziale è automatica e idempotente: due variabili scelgono la topologia e non servono procedura guidata nel browser, modifiche manuali a `wp-config.php` o `.htaccess`, SSH o comandi post-deploy.
 
 > Eseguire sempre il primo deploy e le procedure di backup/ripristino in staging prima di usare lo stack in produzione.
 
@@ -13,7 +13,7 @@ Stack Docker completo per distribuire con un solo deploy un network **WordPress 
 | WP-CLI | `2.12.0` | PHAR scaricato in build e verificato con SHA-512 |
 | MariaDB | `mariadb:11.8.8` | Immagine Docker ufficiale |
 | Redis | `redis:7.4.9-bookworm` | Immagine Docker ufficiale, AOF attivo |
-| Plugin | LiteSpeed Cache `7.8.1`, Redis Object Cache `2.8.0` | Installati da WordPress.org e network-attivati |
+| Plugin | LiteSpeed Cache `7.8.1`, Redis Object Cache `2.8.0` | Installati da WordPress.org e attivati sul sito o sull'intero network |
 
 L'immagine OpenLiteSpeed scelta contiene già `mysqli`, `pdo_mysql`, `curl`, `gd`, `intl`, `mbstring`, `zip`, `exif`, OPcache, PhpRedis e Imagick. Il Dockerfile ne verifica la presenza durante la build.
 
@@ -31,7 +31,7 @@ I volumi nominati persistono esclusivamente i file WordPress, il database e i da
 - Coolify con supporto alle magic environment variables per repository Git (`v4.0.0-beta.411` o successivo).
 - Un server Coolify con Docker Compose e spazio sufficiente per file, database e backup.
 - Un dominio con accesso alla gestione DNS.
-- SMTP esterno se il network deve spedire email: lo stack non include un MTA.
+- SMTP esterno se WordPress deve spedire email: lo stack non include un MTA.
 
 ## Deploy esatto su Coolify
 
@@ -45,17 +45,27 @@ I volumi nominati persistono esclusivamente i file WordPress, il database e i da
 8. Non assegnare domini né port mapping a `mariadb`, `redis` o `cron`.
 9. Premere **Deploy**. Il primo avvio può richiedere alcuni minuti; l'healthcheck concede fino a cinque minuti al bootstrap.
 
-Al termine aprire direttamente:
+Con i default viene creato un Multisite in sottocartelle. Per un single-site impostare `WORDPRESS_ENABLE_MULTISITE=false`; per un network a sottodomini lasciare Multisite attivo e impostare `WORDPRESS_MULTISITE_MODE=subdomain`. In quest'ultimo caso configurare prima anche DNS e dominio wildcard come descritto nella sezione successiva.
+
+Al termine aprire `/wp-admin/`. Per Multisite il Network Admin è:
 
 ```text
 https://example.com/wp-admin/network/
 ```
 
-Accedere con `WORDPRESS_ADMIN_USER` e `WORDPRESS_ADMIN_PASSWORD`. Non compare alcuna procedura guidata WordPress.
+Accedere con `WORDPRESS_ADMIN_USER` e `WORDPRESS_ADMIN_PASSWORD`. Non compare alcuna procedura guidata WordPress in nessuna delle tre modalità.
 
 ## DNS
 
-Creare un record `A` del dominio verso l'IPv4 pubblica del server Coolify e, solo se il server è raggiungibile correttamente via IPv6, un record `AAAA`. Per `www` scegliere un ulteriore record e una strategia di redirect in Coolify; `WORDPRESS_DOMAIN` deve contenere l'host canonico effettivamente usato dal network.
+Creare un record `A` del dominio verso l'IPv4 pubblica del server Coolify e, solo se il server è raggiungibile correttamente via IPv6, un record `AAAA`. Per `www` scegliere un ulteriore record e una strategia di redirect in Coolify; `WORDPRESS_DOMAIN` deve contenere l'host canonico effettivamente usato dal sito o network.
+
+La modalità `subdomain` richiede inoltre:
+
+- un record DNS wildcard `*.example.com` verso lo stesso server;
+- un dominio wildcard `https://*.example.com:7080` assegnato al servizio `wordpress` in Coolify, oltre al dominio principale;
+- un certificato TLS valido per il wildcard. Coolify può richiederne l'emissione tramite challenge DNS, secondo il provider e la configurazione usati.
+
+Questi elementi infrastrutturali non possono essere creati dal bootstrap WordPress. Senza wildcard DNS/proxy, il network viene configurato correttamente ma i siti secondari non sono raggiungibili.
 
 Attendere la propagazione DNS, quindi lasciare che Coolify emetta e rinnovi il certificato. Non configurare certificati o redirect HTTPS dentro OpenLiteSpeed.
 
@@ -66,14 +76,14 @@ Attendere la propagazione DNS, quindi lasciare che Coolify emetta e rinnovi il c
 | Variabile | Esempio | Descrizione |
 | --- | --- | --- |
 | `WORDPRESS_DOMAIN` | `example.com` | Dominio canonico. Accetta anche `https://example.com/` o `http://example.com/`; rifiuta path, query, credenziali e porte. |
-| `WORDPRESS_TITLE` | `Example Network` | Titolo iniziale del network. |
+| `WORDPRESS_TITLE` | `Example Network` | Titolo iniziale del sito o network. |
 | `WORDPRESS_ADMIN_USER` | `networkadmin` | Username amministratore, massimo 60 caratteri. |
 | `WORDPRESS_ADMIN_EMAIL` | `admin@example.com` | Email valida dell'amministratore. |
 | `WORDPRESS_ADMIN_PASSWORD` | valore segreto | Almeno 12 caratteri; non viene scritto nei log. |
 | `SERVICE_PASSWORD_MARIADB` | generata da Coolify | Password root MariaDB. |
 | `SERVICE_PASSWORD_WORDPRESS` | generata da Coolify | Password dell'utente DB `wordpress`. |
 
-Le credenziali amministrative sono richieste dal Compose a ogni deploy, ma vengono usate per creare l'utente soltanto quando il network non è già installato.
+Le credenziali amministrative sono richieste dal Compose a ogni deploy, ma vengono usate per creare l'utente soltanto quando WordPress non è già installato.
 
 ### Opzionali
 
@@ -84,7 +94,9 @@ Le credenziali amministrative sono richieste dal Compose a ogni deploy, ma vengo
 | `WORDPRESS_DEBUG` | `false` | Controlla `WP_DEBUG` e `WP_DEBUG_LOG`; l'output a schermo resta disattivato. |
 | `WORDPRESS_TABLE_PREFIX` | `wp_` | Prefisso tabelle, usato solo quando viene creato `wp-config.php`. |
 | `WORDPRESS_SKIP_EMAIL` | `true` | Evita l'email durante l'installazione iniziale. |
-| `WORDPRESS_INSTALL_PLUGINS` | `true` | Installa e network-attiva i due plugin previsti. |
+| `WORDPRESS_ENABLE_MULTISITE` | `true` | `false` installa un single-site; `true` installa o converte automaticamente a Multisite. |
+| `WORDPRESS_MULTISITE_MODE` | `subdirectory` | Accetta `subdirectory` o `subdomain`; viene applicata quando Multisite è attivo. |
+| `WORDPRESS_INSTALL_PLUGINS` | `true` | Installa e attiva i due plugin sul sito oppure sull'intero network. |
 | `WORDPRESS_ENABLE_REDIS` | `true` | Abilita il drop-in Redis dopo i controlli di connettività. |
 | `WORDPRESS_DISABLE_WP_CRON` | `true` | Imposta `DISABLE_WP_CRON` e abilita il runner separato. |
 | `WORDPRESS_CRON_INTERVAL_SECONDS` | `300` | Intervallo cron; minimo 60 secondi. |
@@ -97,6 +109,18 @@ Le credenziali amministrative sono richieste dal Compose a ogni deploy, ma vengo
 
 I booleani accettano `true/false`, `1/0`, `yes/no` oppure `on/off`.
 
+### Scelta della modalità
+
+| Risultato | `WORDPRESS_ENABLE_MULTISITE` | `WORDPRESS_MULTISITE_MODE` |
+| --- | --- | --- |
+| WordPress single-site | `false` | ignorata, lasciare `subdirectory` |
+| Multisite in sottocartelle (`example.com/demo/`) | `true` | `subdirectory` |
+| Multisite in sottodomini (`demo.example.com`) | `true` | `subdomain` |
+
+Il default resta `true` + `subdirectory`, quindi i deploy esistenti mantengono il comportamento precedente senza aggiungere variabili.
+
+La topologia non è un interruttore distruttivo su dati esistenti: un single-site può essere convertito automaticamente in Multisite, ma un network esistente non viene mai ridotto automaticamente a single-site e non viene convertito tra sottodomini e sottocartelle. In questi due casi il bootstrap si ferma prima di alterare la topologia e richiede una migrazione esplicita.
+
 ## Cosa fa il bootstrap
 
 Ad ogni avvio lo script:
@@ -106,14 +130,15 @@ Ad ogni avvio lo script:
 3. attende MariaDB e, quando richiesto, Redis;
 4. scarica WordPress soltanto se i file core sono assenti;
 5. crea `wp-config.php` soltanto se assente;
-6. installa o converte WordPress Multisite senza `--subdomains`;
-7. sincronizza le costanti Multisite, memoria, cron, cache, debug e Redis;
+6. installa WordPress single-site oppure installa/converte Multisite con la topologia richiesta;
+7. sincronizza o rimuove in sicurezza le costanti Multisite e configura memoria, cron, cache, debug e Redis;
 8. inserisce un blocco gestito per `HTTP_X_FORWARDED_PROTO=https` prima del caricamento di WordPress;
-9. aggiorna esclusivamente il blocco Multisite delimitato in `.htaccess`, conservando le regole esterne;
-10. installa e attiva i plugin in modo idempotente;
-11. avvia LSPHP come utente `nobody` e OpenLiteSpeed in modalità foreground.
+9. aggiorna esclusivamente il blocco rewrite gestito in `.htaccess`, conservando le regole esterne;
+10. nei network a sottodomini installa un MU-plugin gestito che forza HTTPS sui nuovi siti e riallinea quelli esistenti;
+11. installa e attiva i plugin in modo idempotente;
+12. avvia LSPHP come utente `nobody` e OpenLiteSpeed in modalità foreground.
 
-Se un volume contiene già un network con un dominio diverso, il bootstrap fallisce chiaramente invece di alterare parzialmente gli URL. Un cambio dominio richiede una migrazione WordPress esplicita.
+Se un volume contiene un dominio o una topologia diversi da quelli richiesti, il bootstrap fallisce chiaramente invece di alterare parzialmente URL o struttura del database. Un cambio dominio, un downgrade da Multisite o un passaggio tra sottodomini e sottocartelle richiedono una migrazione WordPress esplicita.
 
 ## HTTPS dietro Coolify
 
@@ -126,10 +151,22 @@ Non aggiungere redirect HTTPS nel virtual host: sarebbe facile creare un loop co
 Aprire **Terminal** sul servizio `wordpress` ed eseguire WP-CLI come l'utente che possiede i file:
 
 ```bash
-runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html core is-installed --network
-runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html site list
+runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html core is-installed
 runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html plugin status litespeed-cache
 runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html redis status
+```
+
+Solo su Multisite, per verificare il network ed elencare i siti:
+
+```bash
+runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html core is-installed --network
+runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html site list
+```
+
+Nei network `subdomain` il MU-plugin gestito corregge automaticamente anche gli URL dei siti creati da WP-CLI:
+
+```bash
+runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html site create --slug=demo --title="Demo" --email=admin@example.com
 ```
 
 In alternativa, come root, aggiungere `--allow-root` a ogni comando. Evitare aggiornamenti eseguiti come root per non cambiare l'ownership dei file.
@@ -146,6 +183,8 @@ Aggiornare il repository/branch in Coolify e premere **Redeploy**. Le immagini s
 
 ```bash
 runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html core update
+runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html core update-db
+# Solo Multisite:
 runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html core update-db --network
 runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html plugin update --all
 runuser -u nobody -- wp --path=/var/www/vhosts/localhost/html core verify-checksums
@@ -178,7 +217,7 @@ docker compose run --rm --no-deps --entrypoint tar wordpress -C /var/www/vhosts/
 docker compose start wordpress cron
 ```
 
-Controllare poi `wp core is-installed --network`, `wp site list`, il frontend e il Network Admin. Non usare `docker compose down --volumes`: elimina i dati persistenti.
+Controllare poi `wp core is-installed`, il frontend e l'area amministrativa. Su Multisite controllare anche `wp core is-installed --network`, `wp site list` e il Network Admin. Non usare `docker compose down --volumes`: elimina i dati persistenti.
 
 ## Log
 
@@ -197,7 +236,7 @@ docker compose logs -f wordpress cron mariadb redis
 
 ## Disabilitare Redis
 
-Impostare `WORDPRESS_ENABLE_REDIS=false` e fare redeploy. Il bootstrap rimuove il drop-in con `wp redis disable` e network-disattiva `redis-cache`; eventuali errori vengono segnalati senza distruggere WordPress. Il servizio Redis resta privato e disponibile nello stack per consentire una riattivazione reversibile.
+Impostare `WORDPRESS_ENABLE_REDIS=false` e fare redeploy. Il bootstrap rimuove il drop-in con `wp redis disable` e disattiva `redis-cache` sul sito o network; eventuali errori vengono segnalati senza distruggere WordPress. Il servizio Redis resta privato e disponibile nello stack per consentire una riattivazione reversibile.
 
 ## Impedire reinstallazioni
 
@@ -206,9 +245,11 @@ Il comportamento normale è già idempotente. Per conservare l'installazione:
 - non eliminare i volumi `wordpress_data` e `mariadb_data`;
 - non usare `docker compose down --volumes`;
 - non cambiare `WORDPRESS_DOMAIN` senza una migrazione completa;
+- non cambiare `WORDPRESS_ENABLE_MULTISITE` da `true` a `false` su un network esistente;
+- non cambiare `WORDPRESS_MULTISITE_MODE` dopo la creazione del network;
 - mantenere stabili le password database già usate dal volume MariaDB.
 
-Riavvio e redeploy riusano `wp-config.php`, file e tabelle esistenti. Titolo, utente e password admin non vengono riapplicati a un network già installato.
+Riavvio e redeploy riusano `wp-config.php`, file e tabelle esistenti. Titolo, utente e password admin non vengono riapplicati a WordPress già installato.
 
 ## Troubleshooting
 
@@ -220,9 +261,13 @@ Leggere prima i log del bootstrap. Controllare variabili obbligatorie, validità
 
 Verificare che il dominio Coolify punti a `wordpress:7080`, che il proxy invii `X-Forwarded-Proto: https` e che `WORDPRESS_DOMAIN` non contenga un dominio diverso. Non aggiungere redirect HTTPS in OpenLiteSpeed.
 
-### `/demo/` o altri siti restituiscono 404
+### Siti secondari Multisite restituiscono 404
 
-Controllare che `SUBDOMAIN_INSTALL` sia `false`, che `.htaccess` contenga il blocco `Coolify WordPress Multisite` e riavviare `wordpress` dopo modifiche alle rewrite.
+In modalità `subdirectory`, controllare che `SUBDOMAIN_INSTALL` sia `false` e provare `/demo/`. In modalità `subdomain`, controllare che sia `true`, verificare DNS e dominio wildcard e provare `demo.example.com`. In entrambi i casi `.htaccess` deve contenere un solo blocco `Coolify WordPress Managed`; riavviare `wordpress` dopo modifiche alle rewrite.
+
+### Il bootstrap rifiuta un cambio di modalità
+
+È una protezione intenzionale. `WORDPRESS_ENABLE_MULTISITE=false` non trasforma un network esistente in single-site e `WORDPRESS_MULTISITE_MODE` non converte un network tra sottodomini e sottocartelle. Ripristinare le variabili originali oppure migrare database e contenuti verso una nuova installazione con la topologia desiderata.
 
 ### Redis non è connesso
 
@@ -251,8 +296,9 @@ cp .env.example .env
 docker compose config
 docker compose build --pull
 docker compose up -d --wait --wait-timeout 600
+docker compose exec --user 65534:65534 wordpress wp --path=/var/www/vhosts/localhost/html core is-installed
+# Solo quando WORDPRESS_ENABLE_MULTISITE=true:
 docker compose exec --user 65534:65534 wordpress wp --path=/var/www/vhosts/localhost/html core is-installed --network
-docker compose exec --user 65534:65534 wordpress wp --path=/var/www/vhosts/localhost/html site list
 ```
 
 `.env` è ignorato da Git. Al termine del test, `docker compose down --volumes` elimina **irreversibilmente** soltanto i volumi locali di quello stack di prova.
