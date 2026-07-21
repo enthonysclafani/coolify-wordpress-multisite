@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+.DS_Store
+backups
+data
+logs
+sites
+*.log
+*.sql
+*.sql.gz
+*.tar.gz

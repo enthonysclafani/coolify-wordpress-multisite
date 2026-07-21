@@ -3,9 +3,114 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        WP_CLI_VERSION: "2.12.0"
     environment:
-      WORDPRESS_DOMAIN: ${WORDPRESS_DOMAIN:?Set WORDPRESS_DOMAIN in Coolify}
-      WORDPRESS_TITLE: ${WORDPRESS_TITLE:?Set WORDPRESS_TITLE in Coolify}
-      WORDPRESS_ADMIN_USER: ${WORDPRESS_ADMIN_USER:?Set WORDPRESS_ADMIN_USER in Coolify}
-      WORDPRESS_ADMIN_EMAIL: ${WORDPRESS_ADMIN_EMAIL:?Set WORDPRESS_ADMIN_EMAIL in Coolify}
-      WORDPRESS_ADMIN_PASSWORD: ${WORDPRESS_ADMIN_PASSWORD:?Set WORDPRESS_ADMIN_PASSWORD in Cool
+      WORDPRESS_DOMAIN: ${WORDPRESS_DOMAIN:?Imposta WORDPRESS_DOMAIN in Coolify}
+      WORDPRESS_TITLE: ${WORDPRESS_TITLE:?Imposta WORDPRESS_TITLE in Coolify}
+      WORDPRESS_ADMIN_USER: ${WORDPRESS_ADMIN_USER:?Imposta WORDPRESS_ADMIN_USER in Coolify}
+      WORDPRESS_ADMIN_EMAIL: ${WORDPRESS_ADMIN_EMAIL:?Imposta WORDPRESS_ADMIN_EMAIL in Coolify}
+      WORDPRESS_ADMIN_PASSWORD: ${WORDPRESS_ADMIN_PASSWORD:?Imposta WORDPRESS_ADMIN_PASSWORD in Coolify}
+      WORDPRESS_LOCALE: ${WORDPRESS_LOCALE:-it_IT}
+      WORDPRESS_TIMEZONE: ${WORDPRESS_TIMEZONE:-Europe/Rome}
+      WORDPRESS_DEBUG: ${WORDPRESS_DEBUG:-false}
+      WORDPRESS_TABLE_PREFIX: ${WORDPRESS_TABLE_PREFIX:-wp_}
+      WORDPRESS_SKIP_EMAIL: ${WORDPRESS_SKIP_EMAIL:-true}
+      WORDPRESS_ENABLE_MULTISITE: ${WORDPRESS_ENABLE_MULTISITE:-true}
+      WORDPRESS_MULTISITE_MODE: ${WORDPRESS_MULTISITE_MODE:-subdirectory}
+      WORDPRESS_INSTALL_PLUGINS: ${WORDPRESS_INSTALL_PLUGINS:-true}
+      WORDPRESS_ENABLE_REDIS: ${WORDPRESS_ENABLE_REDIS:-true}
+      WORDPRESS_DISABLE_WP_CRON: ${WORDPRESS_DISABLE_WP_CRON:-true}
+      WORDPRESS_MEMORY_LIMIT: ${WORDPRESS_MEMORY_LIMIT:-256M}
+      WORDPRESS_MAX_MEMORY_LIMIT: ${WORDPRESS_MAX_MEMORY_LIMIT:-512M}
+      WORDPRESS_VERSION: ${WORDPRESS_VERSION:-7.0.2}
+      PHP_UPLOAD_MAX_FILESIZE: ${PHP_UPLOAD_MAX_FILESIZE:-1024M}
+      PHP_POST_MAX_SIZE: ${PHP_POST_MAX_SIZE:-1024M}
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
+      WORDPRESS_DB_HOST: mariadb:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${SERVICE_PASSWORD_WORDPRESS:?Imposta SERVICE_PASSWORD_WORDPRESS in Coolify}
+      WORDPRESS_REDIS_HOST: redis
+      WORDPRESS_REDIS_PORT: "6379"
+    expose:
+      - "7080"
+    volumes:
+      - wordpress_data:/var/www/vhosts/localhost/html
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/wordpress-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 5m
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        WP_CLI_VERSION: "2.12.0"
+    entrypoint: ["/usr/local/bin/wordpress-cron"]
+    environment:
+      WORDPRESS_DISABLE_WP_CRON: ${WORDPRESS_DISABLE_WP_CRON:-true}
+      WORDPRESS_CRON_INTERVAL_SECONDS: ${WORDPRESS_CRON_INTERVAL_SECONDS:-300}
+    volumes:
+      - wordpress_data:/var/www/vhosts/localhost/html
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    user: "65534:65534"
+    init: true
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11.8.8
+    environment:
+      MARIADB_ROOT_PASSWORD: ${SERVICE_PASSWORD_MARIADB:?Imposta SERVICE_PASSWORD_MARIADB in Coolify}
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: ${SERVICE_PASSWORD_WORDPRESS:?Imposta SERVICE_PASSWORD_WORDPRESS in Coolify}
+      MARIADB_AUTO_UPGRADE: "1"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4.9-bookworm
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  wordpress_data:
+  mariadb_data:
+  redis_data:

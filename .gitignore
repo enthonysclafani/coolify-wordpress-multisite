@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+docker-compose.override.yml
+backups/
+data/
+logs/
+sites/
+*.log
+*.sql
+*.sql.gz
+*.tar.gz

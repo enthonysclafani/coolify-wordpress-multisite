@@ -1,0 +1,11 @@
+; Generato a ogni avvio da wordpress-entrypoint.
+upload_max_filesize = @UPLOAD_MAX_FILESIZE@
+post_max_size = @POST_MAX_SIZE@
+memory_limit = @MEMORY_LIMIT@
+max_execution_time = 300
+max_input_time = 300
+max_input_vars = 5000
+date.timezone = @TIMEZONE@
+expose_php = Off
+display_errors = Off
+log_errors = On
