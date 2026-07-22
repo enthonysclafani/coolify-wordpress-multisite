@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "name": "minimal",
+  "wordpress": {
+    "environment": "production",
+    "permalink_structure": "/%postname%/",
+    "search_engine_visibility": true,
+    "delete_default_content": false,
+    "update_policy": "default",
+    "disallow_file_edit": false,
+    "disallow_file_mods": false
+  },
+  "plugins": [
+    {
+      "slug": "litespeed-cache",
+      "version": "7.8.1",
+      "activation": "auto",
+      "required": true
+    }
+  ],
+  "themes": [],
+  "multisite": {
+    "registration": "none",
+    "upload_space_mb": 100,
+    "upload_filetypes": "jpg jpeg png gif webp avif heic pdf doc docx xls xlsx zip",
+    "apply_to_existing_sites": false
+  }
+}

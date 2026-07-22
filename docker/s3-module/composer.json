@@ -1,0 +1,31 @@
+{
+  "name": "coolify/wordpress-s3-module",
+  "description": "Pinned Composer bundle for the optional S3 Uploads module.",
+  "type": "project",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": ">=8.3",
+    "composer/installers": "^2.3.0",
+    "humanmade/s3-uploads": "~3.0.13"
+  },
+  "config": {
+    "allow-plugins": {
+      "composer/installers": true
+    },
+    "classmap-authoritative": true,
+    "optimize-autoloader": true,
+    "platform": {
+      "php": "8.3.0"
+    },
+    "sort-packages": true
+  },
+  "extra": {
+    "installer-paths": {
+      "wp-content/plugins/{$name}/": [
+        "type:wordpress-plugin"
+      ]
+    }
+  },
+  "prefer-stable": true,
+  "minimum-stability": "stable"
+}

@@ -11,3 +11,5 @@ sites/
 *.sql
 *.sql.gz
 *.tar.gz
+docker/s3-module/vendor/
+docker/s3-module/wp-content/

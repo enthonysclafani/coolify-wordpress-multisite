@@ -1,24 +1,18 @@
 x-suite-metadata:
-  preset: standard
+  preset: external-services
   optional-profiles:
     - worker
     - backup
 
 x-wordpress-build: &wordpress-build
-  context: .
+  context: ..
   dockerfile: Dockerfile
-  target: ${WORDPRESS_IMAGE_TARGET:-final}
+  target: ${WORDPRESS_IMAGE_TARGET:-wordpress-suite}
   args:
     OPENLITESPEED_IMAGE: ${OPENLITESPEED_IMAGE:-litespeedtech/openlitespeed:1.8.5-lsphp83}
     WP_CLI_VERSION: ${WP_CLI_VERSION:-2.12.0}
     WORDPRESS_VERSION: ${WORDPRESS_VERSION:-7.0.2}
     WORDPRESS_LOCALE: ${WORDPRESS_LOCALE:-it_IT}
-    LITESPEED_CACHE_VERSION: ${LITESPEED_CACHE_VERSION:-7.8.1}
-    REDIS_CACHE_VERSION: ${REDIS_CACHE_VERSION:-2.8.0}
-    ELASTICPRESS_VERSION: ${ELASTICPRESS_VERSION:-5.3.3}
-    LITESPEED_CACHE_SHA256: ${LITESPEED_CACHE_SHA256:-b4c550a197f30212ab59489f75eb00e3610253db9ee3d837b1e8f7bf8ba803a9}
-    REDIS_CACHE_SHA256: ${REDIS_CACHE_SHA256:-f077ac8b9c154cee936d3872b0734d42f7fd7f350e68fe8b2b20a69e854980cd}
-    ELASTICPRESS_SHA256: ${ELASTICPRESS_SHA256:-157cd901955a7da718301431f668e9abcac48d41b8392897c3c4ccc93e820813}
 
 x-wordpress-environment: &wordpress-environment
   WORDPRESS_DOMAIN: ${WORDPRESS_DOMAIN:?Imposta WORDPRESS_DOMAIN in Coolify}
@@ -33,7 +27,7 @@ x-wordpress-environment: &wordpress-environment
   WORDPRESS_SKIP_EMAIL: ${WORDPRESS_SKIP_EMAIL:-true}
   WORDPRESS_ENABLE_MULTISITE: ${WORDPRESS_ENABLE_MULTISITE:-true}
   WORDPRESS_MULTISITE_MODE: ${WORDPRESS_MULTISITE_MODE:-subdirectory}
-  WORDPRESS_FILESYSTEM_MODE: ${WORDPRESS_FILESYSTEM_MODE:-mutable}
+  WORDPRESS_FILESYSTEM_MODE: mutable
   WORDPRESS_BOOTSTRAP_PRESET: ${WORDPRESS_BOOTSTRAP_PRESET:-standard}
   WORDPRESS_BOOTSTRAP_MANIFEST: ${WORDPRESS_BOOTSTRAP_MANIFEST:-}
   WORDPRESS_BOOTSTRAP_MANIFEST_JSON: ${WORDPRESS_BOOTSTRAP_MANIFEST_JSON:-}
@@ -49,8 +43,7 @@ x-wordpress-environment: &wordpress-environment
   REDIS_CACHE_VERSION: ${REDIS_CACHE_VERSION:-2.8.0}
   ELASTICPRESS_VERSION: ${ELASTICPRESS_VERSION:-5.3.3}
   WORDPRESS_RUNTIME_PROFILE: ${WORDPRESS_RUNTIME_PROFILE:-balanced}
-  WORDPRESS_HEALTHCHECK_MODE: ${WORDPRESS_HEALTHCHECK_MODE:-readiness}
-  WORDPRESS_CLI_BOOTSTRAP: ${WORDPRESS_CLI_BOOTSTRAP:-false}
+  WORDPRESS_HEALTHCHECK_MODE: readiness
   PHP_UPLOAD_MAX_FILESIZE: ${PHP_UPLOAD_MAX_FILESIZE:-1024M}
   PHP_POST_MAX_SIZE: ${PHP_POST_MAX_SIZE:-1024M}
   PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
@@ -67,14 +60,14 @@ x-wordpress-environment: &wordpress-environment
   OLS_MAX_CONNECTIONS: ${OLS_MAX_CONNECTIONS:-}
   OLS_KEEP_ALIVE_TIMEOUT: ${OLS_KEEP_ALIVE_TIMEOUT:-5}
   OLS_MAX_REQUEST_BODY_SIZE: ${OLS_MAX_REQUEST_BODY_SIZE:-2047M}
-  WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-mariadb:3306}
-  WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
-  WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
-  WORDPRESS_DB_PASSWORD: ${SERVICE_PASSWORD_WORDPRESS:?Imposta SERVICE_PASSWORD_WORDPRESS in Coolify}
-  WORDPRESS_DB_SSL: ${WORDPRESS_DB_SSL:-false}
-  WORDPRESS_REDIS_HOST: ${WORDPRESS_REDIS_HOST:-redis}
+  WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:?Imposta l'host del database esterno}
+  WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:?Imposta il database esterno}
+  WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:?Imposta l'utente del database esterno}
+  WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?Imposta la password del database esterno}
+  WORDPRESS_DB_SSL: ${WORDPRESS_DB_SSL:-true}
+  WORDPRESS_REDIS_HOST: ${WORDPRESS_REDIS_HOST:?Imposta l'host Redis esterno}
   WORDPRESS_REDIS_PORT: ${WORDPRESS_REDIS_PORT:-6379}
-  WORDPRESS_REDIS_SCHEME: ${WORDPRESS_REDIS_SCHEME:-tcp}
+  WORDPRESS_REDIS_SCHEME: ${WORDPRESS_REDIS_SCHEME:-tls}
   WORDPRESS_REDIS_DATABASE: ${WORDPRESS_REDIS_DATABASE:-0}
   WORDPRESS_REDIS_USERNAME: ${WORDPRESS_REDIS_USERNAME:-}
   WORDPRESS_REDIS_PASSWORD: ${WORDPRESS_REDIS_PASSWORD:-}
@@ -127,9 +120,6 @@ services:
       - "7080"
     volumes:
       - wordpress_data:/var/www/vhosts/localhost/html
-    depends_on:
-      mariadb:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "/usr/local/bin/wordpress-healthcheck"]
       interval: 15s
@@ -176,7 +166,7 @@ services:
   backup:
     profiles: ["backup"]
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile.backup
     environment:
       BACKUP_ENABLED: ${BACKUP_ENABLED:-true}
@@ -191,11 +181,11 @@ services:
       AWS_ACCESS_KEY_ID: ${BACKUP_AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${BACKUP_AWS_SECRET_ACCESS_KEY:-}
       AWS_DEFAULT_REGION: ${BACKUP_AWS_DEFAULT_REGION:-}
-      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-mariadb:3306}
-      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
-      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
-      WORDPRESS_DB_PASSWORD: ${SERVICE_PASSWORD_WORDPRESS:?Imposta SERVICE_PASSWORD_WORDPRESS in Coolify}
-      WORDPRESS_DB_SSL: ${WORDPRESS_DB_SSL:-false}
+      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:?Imposta l'host del database esterno}
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:?Imposta il database esterno}
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:?Imposta l'utente del database esterno}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?Imposta la password del database esterno}
+      WORDPRESS_DB_SSL: ${WORDPRESS_DB_SSL:-true}
     volumes:
       - wordpress_data:/data/wordpress:ro
       - restic_data:/repository
@@ -211,53 +201,6 @@ services:
     init: true
     restart: unless-stopped
 
-  mariadb:
-    image: mariadb:11.8.8
-    environment:
-      MARIADB_ROOT_PASSWORD: ${SERVICE_PASSWORD_MARIADB:?Imposta SERVICE_PASSWORD_MARIADB in Coolify}
-      MARIADB_DATABASE: ${WORDPRESS_DB_NAME:-wordpress}
-      MARIADB_USER: ${WORDPRESS_DB_USER:-wordpress}
-      MARIADB_PASSWORD: ${SERVICE_PASSWORD_WORDPRESS:?Imposta SERVICE_PASSWORD_WORDPRESS in Coolify}
-      MARIADB_AUTO_UPGRADE: "1"
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --max-connections=${MARIADB_MAX_CONNECTIONS:-200}
-      - --innodb-buffer-pool-size=${MARIADB_INNODB_BUFFER_POOL_SIZE:-256M}
-    volumes:
-      - mariadb_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
-    restart: unless-stopped
-
-  redis:
-    image: redis:7.4.9-bookworm
-    command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --appendfsync
-      - everysec
-      - --maxmemory
-      - ${REDIS_MAXMEMORY:-0}
-      - --maxmemory-policy
-      - ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 12
-      start_period: 10s
-    restart: unless-stopped
-
 volumes:
   wordpress_data:
-  mariadb_data:
-  redis_data:
   restic_data:

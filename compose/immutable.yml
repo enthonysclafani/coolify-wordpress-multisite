@@ -1,13 +1,13 @@
 x-suite-metadata:
-  preset: standard
+  preset: immutable
   optional-profiles:
     - worker
     - backup
 
 x-wordpress-build: &wordpress-build
-  context: .
+  context: ..
   dockerfile: Dockerfile
-  target: ${WORDPRESS_IMAGE_TARGET:-final}
+  target: wordpress-immutable-suite
   args:
     OPENLITESPEED_IMAGE: ${OPENLITESPEED_IMAGE:-litespeedtech/openlitespeed:1.8.5-lsphp83}
     WP_CLI_VERSION: ${WP_CLI_VERSION:-2.12.0}
@@ -33,8 +33,8 @@ x-wordpress-environment: &wordpress-environment
   WORDPRESS_SKIP_EMAIL: ${WORDPRESS_SKIP_EMAIL:-true}
   WORDPRESS_ENABLE_MULTISITE: ${WORDPRESS_ENABLE_MULTISITE:-true}
   WORDPRESS_MULTISITE_MODE: ${WORDPRESS_MULTISITE_MODE:-subdirectory}
-  WORDPRESS_FILESYSTEM_MODE: ${WORDPRESS_FILESYSTEM_MODE:-mutable}
-  WORDPRESS_BOOTSTRAP_PRESET: ${WORDPRESS_BOOTSTRAP_PRESET:-standard}
+  WORDPRESS_FILESYSTEM_MODE: immutable
+  WORDPRESS_BOOTSTRAP_PRESET: ${WORDPRESS_BOOTSTRAP_PRESET:-immutable}
   WORDPRESS_BOOTSTRAP_MANIFEST: ${WORDPRESS_BOOTSTRAP_MANIFEST:-}
   WORDPRESS_BOOTSTRAP_MANIFEST_JSON: ${WORDPRESS_BOOTSTRAP_MANIFEST_JSON:-}
   WORDPRESS_MANIFEST_REAPPLY: ${WORDPRESS_MANIFEST_REAPPLY:-false}
@@ -49,8 +49,8 @@ x-wordpress-environment: &wordpress-environment
   REDIS_CACHE_VERSION: ${REDIS_CACHE_VERSION:-2.8.0}
   ELASTICPRESS_VERSION: ${ELASTICPRESS_VERSION:-5.3.3}
   WORDPRESS_RUNTIME_PROFILE: ${WORDPRESS_RUNTIME_PROFILE:-balanced}
-  WORDPRESS_HEALTHCHECK_MODE: ${WORDPRESS_HEALTHCHECK_MODE:-readiness}
-  WORDPRESS_CLI_BOOTSTRAP: ${WORDPRESS_CLI_BOOTSTRAP:-false}
+  WORDPRESS_HEALTHCHECK_MODE: readiness
+  WORDPRESS_CLI_BOOTSTRAP: "false"
   PHP_UPLOAD_MAX_FILESIZE: ${PHP_UPLOAD_MAX_FILESIZE:-1024M}
   PHP_POST_MAX_SIZE: ${PHP_POST_MAX_SIZE:-1024M}
   PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
@@ -62,23 +62,22 @@ x-wordpress-environment: &wordpress-environment
   PHP_OPCACHE_MEMORY_CONSUMPTION: ${PHP_OPCACHE_MEMORY_CONSUMPTION:-}
   PHP_OPCACHE_INTERNED_STRINGS_BUFFER: ${PHP_OPCACHE_INTERNED_STRINGS_BUFFER:-}
   PHP_OPCACHE_MAX_ACCELERATED_FILES: ${PHP_OPCACHE_MAX_ACCELERATED_FILES:-}
-  PHP_OPCACHE_VALIDATE_TIMESTAMPS: ${PHP_OPCACHE_VALIDATE_TIMESTAMPS:-1}
-  PHP_OPCACHE_REVALIDATE_FREQ: ${PHP_OPCACHE_REVALIDATE_FREQ:-2}
+  PHP_OPCACHE_VALIDATE_TIMESTAMPS: "0"
+  PHP_OPCACHE_REVALIDATE_FREQ: "0"
   OLS_MAX_CONNECTIONS: ${OLS_MAX_CONNECTIONS:-}
   OLS_KEEP_ALIVE_TIMEOUT: ${OLS_KEEP_ALIVE_TIMEOUT:-5}
   OLS_MAX_REQUEST_BODY_SIZE: ${OLS_MAX_REQUEST_BODY_SIZE:-2047M}
-  WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-mariadb:3306}
+  WORDPRESS_DB_HOST: mariadb:3306
   WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
   WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
   WORDPRESS_DB_PASSWORD: ${SERVICE_PASSWORD_WORDPRESS:?Imposta SERVICE_PASSWORD_WORDPRESS in Coolify}
-  WORDPRESS_DB_SSL: ${WORDPRESS_DB_SSL:-false}
-  WORDPRESS_REDIS_HOST: ${WORDPRESS_REDIS_HOST:-redis}
-  WORDPRESS_REDIS_PORT: ${WORDPRESS_REDIS_PORT:-6379}
-  WORDPRESS_REDIS_SCHEME: ${WORDPRESS_REDIS_SCHEME:-tcp}
+  WORDPRESS_DB_SSL: "false"
+  WORDPRESS_REDIS_HOST: redis
+  WORDPRESS_REDIS_PORT: "6379"
+  WORDPRESS_REDIS_SCHEME: tcp
   WORDPRESS_REDIS_DATABASE: ${WORDPRESS_REDIS_DATABASE:-0}
-  WORDPRESS_REDIS_USERNAME: ${WORDPRESS_REDIS_USERNAME:-}
-  WORDPRESS_REDIS_PASSWORD: ${WORDPRESS_REDIS_PASSWORD:-}
-  WORDPRESS_REDIS_TLS_CA: ${WORDPRESS_REDIS_TLS_CA:-}
+  WORDPRESS_REDIS_USERNAME: ""
+  WORDPRESS_REDIS_PASSWORD: ""
   WORDPRESS_SMTP_MODE: ${WORDPRESS_SMTP_MODE:-disabled}
   WORDPRESS_SMTP_HOST: ${WORDPRESS_SMTP_HOST:-}
   WORDPRESS_SMTP_PORT: ${WORDPRESS_SMTP_PORT:-587}
@@ -126,7 +125,7 @@ services:
     expose:
       - "7080"
     volumes:
-      - wordpress_data:/var/www/vhosts/localhost/html
+      - wordpress_uploads:/var/www/vhosts/localhost/html/wp-content/uploads
     depends_on:
       mariadb:
         condition: service_healthy
@@ -143,13 +142,14 @@ services:
   cron:
     build: *wordpress-build
     entrypoint: ["/usr/local/bin/wordpress-cron"]
-    environment: *wordpress-environment
+    environment:
+      <<: *wordpress-environment
+      WORDPRESS_CLI_BOOTSTRAP: "true"
     volumes:
-      - wordpress_data:/var/www/vhosts/localhost/html
+      - wordpress_uploads:/var/www/vhosts/localhost/html/wp-content/uploads
     depends_on:
       wordpress:
         condition: service_healthy
-    user: "65534:65534"
     init: true
     restart: unless-stopped
 
@@ -157,9 +157,11 @@ services:
     profiles: ["worker"]
     build: *wordpress-build
     entrypoint: ["/usr/local/bin/wordpress-worker"]
-    environment: *wordpress-environment
+    environment:
+      <<: *wordpress-environment
+      WORDPRESS_CLI_BOOTSTRAP: "true"
     volumes:
-      - wordpress_data:/var/www/vhosts/localhost/html
+      - wordpress_uploads:/var/www/vhosts/localhost/html/wp-content/uploads
     depends_on:
       wordpress:
         condition: service_healthy
@@ -168,15 +170,14 @@ services:
       interval: 30s
       timeout: 3s
       retries: 5
-      start_period: 1m
-    user: "65534:65534"
+      start_period: 2m
     init: true
     restart: unless-stopped
 
   backup:
     profiles: ["backup"]
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile.backup
     environment:
       BACKUP_ENABLED: ${BACKUP_ENABLED:-true}
@@ -191,13 +192,13 @@ services:
       AWS_ACCESS_KEY_ID: ${BACKUP_AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${BACKUP_AWS_SECRET_ACCESS_KEY:-}
       AWS_DEFAULT_REGION: ${BACKUP_AWS_DEFAULT_REGION:-}
-      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-mariadb:3306}
+      WORDPRESS_DB_HOST: mariadb:3306
       WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
       WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
       WORDPRESS_DB_PASSWORD: ${SERVICE_PASSWORD_WORDPRESS:?Imposta SERVICE_PASSWORD_WORDPRESS in Coolify}
-      WORDPRESS_DB_SSL: ${WORDPRESS_DB_SSL:-false}
+      WORDPRESS_DB_SSL: "false"
     volumes:
-      - wordpress_data:/data/wordpress:ro
+      - wordpress_uploads:/data/wordpress/wp-content/uploads:ro
       - restic_data:/repository
     depends_on:
       wordpress:
@@ -257,7 +258,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  wordpress_data:
+  wordpress_uploads:
   mariadb_data:
   redis_data:
   restic_data:

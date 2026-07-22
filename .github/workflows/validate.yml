@@ -9,40 +9,100 @@ on:
 permissions:
   contents: read
 
-env:
-  WORDPRESS_DOMAIN: example.com
-  WORDPRESS_TITLE: CI Network
-  WORDPRESS_ADMIN_USER: networkadmin
-  WORDPRESS_ADMIN_EMAIL: admin@example.com
-  WORDPRESS_ADMIN_PASSWORD: ci-placeholder-at-least-12-characters
-  WORDPRESS_ENABLE_MULTISITE: "true"
-  WORDPRESS_MULTISITE_MODE: subdirectory
-  SERVICE_PASSWORD_MARIADB: ci-placeholder-mariadb
-  SERVICE_PASSWORD_WORDPRESS: ci-placeholder-wordpress
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  validate:
+  static:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Validate YAML syntax
-        run: ruby -e 'require "yaml"; ARGV.each { |file| YAML.parse_file(file) }' docker-compose.yml .github/workflows/validate.yml
 
       - name: Install ShellCheck
         run: |
           sudo apt-get update
           sudo apt-get install --yes shellcheck
 
-      - name: Validate shell scripts
-        run: |
-          bash -n docker/*.sh
-          shellcheck docker/*.sh
+      - name: Validate Composer manifest
+        run: composer --working-dir=docker/s3-module validate --strict
 
-      - name: Validate Docker Compose
-        run: docker compose config --quiet
+      - name: Static validation
+        run: ./tests/validate.sh
 
-      - name: Build WordPress image
-        run: docker compose build --pull wordpress
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: final
+            target: final
+            dockerfile: Dockerfile
+            build_args: ""
+          - name: php84
+            target: final
+            dockerfile: Dockerfile
+            build_args: OPENLITESPEED_IMAGE=litespeedtech/openlitespeed:1.8.5-lsphp84
+          - name: wordpress-suite
+            target: wordpress-suite
+            dockerfile: Dockerfile
+            build_args: ""
+          - name: wordpress-immutable-suite
+            target: wordpress-immutable-suite
+            dockerfile: Dockerfile
+            build_args: ""
+          - name: backup
+            target: ""
+            dockerfile: Dockerfile.backup
+            build_args: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build target
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          build-args: ${{ matrix.build_args }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: static
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compose: docker-compose.yml
+            topology: single
+          - compose: docker-compose.yml
+            topology: subdirectory
+          - compose: docker-compose.yml
+            topology: subdomain
+          - compose: compose/minimal.yml
+            topology: single
+          - compose: compose/mysql.yml
+            topology: subdirectory
+          - compose: compose/immutable.yml
+            topology: subdirectory
+          - compose: docker-compose.yml
+            topology: single
+            profiles: worker,backup
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run isolated smoke test
+        run: ./tests/smoke.sh "${{ matrix.compose }}" "${{ matrix.topology }}" "${{ matrix.profiles }}"

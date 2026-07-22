@@ -2,9 +2,9 @@
 upload_max_filesize = @UPLOAD_MAX_FILESIZE@
 post_max_size = @POST_MAX_SIZE@
 memory_limit = @MEMORY_LIMIT@
-max_execution_time = 300
-max_input_time = 300
-max_input_vars = 5000
+max_execution_time = @MAX_EXECUTION_TIME@
+max_input_time = @MAX_INPUT_TIME@
+max_input_vars = @MAX_INPUT_VARS@
 date.timezone = @TIMEZONE@
 expose_php = Off
 display_errors = Off
